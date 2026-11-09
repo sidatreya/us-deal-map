@@ -1,0 +1,167 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="icon" href="data:,"><title>US Real Estate Engine — Stage 2</title>
+<link rel="stylesheet" href="leaflet.css"><script src="leaflet.js"></script><script src="data.js"></script><script src="counties.js"></script><script src="zips.js"></script><script>document.write('<script src="deals.js?'+Date.now()+'"><\/script>')</script>
+<style>body{margin:0;font:13px system-ui;display:grid;grid-template-columns:1fr 520px;height:100vh}#map{height:100vh}#side{padding:10px;overflow:auto;background:#fafafa}
+.info{background:#fff;padding:6px 8px;box-shadow:0 0 6px #0003;border-radius:4px;min-width:220px}.legend i{display:inline-block;width:18px;height:10px}small{color:#666}
+.tabs button{padding:6px 12px;border:1px solid #ccc;background:#eee;cursor:pointer}.tabs button.on{background:#fff;border-bottom:none;font-weight:bold}
+.banner{padding:6px;border-radius:4px;font-weight:bold;margin:6px 0}.sample{background:#fff3cd;border:2px dashed #e0a800}.live{background:#d4edda;border:1px solid #28a745}
+table{border-collapse:collapse;width:100%;font-size:12px}td,th{border-bottom:1px solid #ddd;padding:3px;text-align:left}tr.d:hover{background:#eef;cursor:pointer}
+.cat{font-weight:bold;padding:1px 6px;border-radius:3px;color:#fff}.A{background:#1a9850}.B{background:#66bd63}.C{background:#fdae61}.Reject{background:#999}
+.slab{background:none;border:none;box-shadow:none;font-weight:600;color:#333;font-size:11px;text-shadow:0 0 3px #fff,0 0 3px #fff}
+.clab{background:none;border:none;box-shadow:none;color:#444;font-size:10px;text-shadow:0 0 2px #fff,0 0 2px #fff}
+.slab:before,.clab:before{display:none}.pb{background:#d4edda;color:#1b5e20;border-radius:3px;padding:0 4px;font-size:10px}label{margin-right:8px}details.sg{border:1px solid #ddd;border-radius:4px;margin:4px 0;background:#fff}details.sg>summary{padding:4px 6px;cursor:pointer;font-weight:600}#zipmsg{margin:4px 0}.legend{max-height:45vh;overflow:auto;max-width:300px}@media(max-width:900px){body{grid-template-columns:1fr}#map{height:60vh}.legend{max-height:30vh;font-size:11px}}input[type=number]{width:80px}</style></head>
+<body><div id="map"></div><div id="side">
+<div class="tabs"><button id="t1" class="on">Deal filter</button><button id="t3">Leaderboard</button><button id="t2">Heat map &amp; history</button></div>
+<div style="margin:6px 0"><label>Search <input id="zipq" list="sugg" autocomplete="off" placeholder="zip, city, county or state" style="width:240px"></label><datalist id="sugg"></datalist><button id="zipgo">Go</button></div><div id="zipmsg"></div>
+<div id="p1">
+<div id="banner"></div>
+<div><label>Price $<input type="number" id="minp" value="50000"> – <input type="number" id="maxp" value="100000"></label><br>
+<label>Max price-to-rent <input type="number" id="mpr" value="15" step="0.5"></label>
+<label>Min cash flow $<input type="range" id="mcf" min="400" max="800" step="50" value="400"> <b id="mcfv">400</b>/mo</label><br>
+<label>Landlord score ≥ <input type="number" id="lmin" value="75"></label>
+<label><input type="checkbox" id="qonly" checked> Qualifying only</label><label>Show top <input type="number" id="topn" value="25" style="width:50px"> by ROI</label><br>
+<button id="refresh">⟳ Refresh listings &amp; re-score</button> <button id="u50">Under-$50k check view</button> <button id="budget">Back to $50–100k budget</button> <span id="st"></span></div>
+<details open class="sg" id="fp"><summary>Filters · <span id="fcnt"></span> <button id="freset" type="button">Reset</button></summary><div style="padding:6px;line-height:2">
+<label>State <select id="stf"><option value="">All states</option></select></label><label>County <select id="ctf"><option value="">All counties</option></select></label>
+<label>Grade <select id="gf"><option value="">Any</option><option>A</option><option>B</option><option>C</option><option value="Reject">Reject</option></select></label><br>
+<span>Price from $<b id="fpmv"></b> to $<b id="fprv"></b></span> <label><input type="checkbox" id="fu50" checked> Include under $50,000</label>
+<div id="pband" style="position:relative;width:320px;margin:2px 0"><div id="pbk" style="position:absolute;top:0;height:6px;background:#b7e1c1;border-radius:3px" title="Preferred range $50,000–$100,000"></div>
+<input type="range" id="fpm" step="1000" style="width:320px;display:block;margin:6px 0 0"><input type="range" id="fpr" step="1000" style="width:320px;display:block;margin:0"><small id="pblab" style="position:absolute;top:-14px;color:#2e7d32">Preferred range</small></div><br>
+<label>ROI score at least <input type="number" id="fsc" min="0" max="100"></label><label>Price-to-rent at most <input type="number" id="fpt" step="0.5"> years</label><br>
+<label>Cash-on-cash at least <input type="number" id="fcoc" step="0.5"> % a year</label><label>Tenant in place <select id="ften"><option value="">Either</option><option value="1">Yes</option><option value="0">Not stated</option></select></label><br>
+<label>Section 8 fit at least <input type="number" id="fs8" step="0.05"> × <small>(HUD rent ÷ market rent)</small></label><br>
+<label>5-year growth at least <input type="number" id="fg5" step="0.5"> % a year</label><label>10-year growth at least <input type="number" id="fg10" step="0.5"> % a year</label><br>
+<label>Landlord score at least <input type="number" id="fll"></label><label>Violent crime at most <input type="number" id="fcr" step="50"> per 100,000 people <small>(state level, FBI 2024)</small></label>
+<br><small>Empty boxes mean "any". Homes with no growth figure are left out when a growth minimum is set.</small></div></details>
+<div id="detail"></div>
+<h4>Ranked deals by state <small id="cnt"></small></h4><div id="tbl"></div>
+<details><summary><b>How scoring works</b></summary><small>
+<b>Qualifies</b> only if ALL: single-family · price within budget · landlord-friendly state (our law score ≥ cutoff) · price-to-rent ≤ cutoff · monthly cash flow ≥ minimum after all costs · zip 5y and 10y ZHVI growth &gt; 0.5%/yr · no bogus-deal flags (under-$50k check: as-is/fixer, lien, auction, fire, land only, no sqft, pre-1940, rent &lt; $800, implausible rent/price).<br>
+<b>Costs/month</b>: management 8% and vacancy 8% of rent, maintenance 1% of price/yr, insurance $1,500/yr, property tax = state effective rate × price, HOA from listing — each marked <i>estimate</i> unless from the listing. Rent = feed rent, else Zillow ZORI zip × bedroom factor (estimate), else 90% HUD FMR.<br>
+<b>ROI score 0–100</b>: cash-on-cash (3% closing) 30 · price-to-rent 15 · landlord score 15 · 10y growth 15 · violent crime (FBI CDE, state level) 10 · Section 8 fit (HUD SAFMR ÷ market rent) 10 · 5y momentum 5 · +5 if a tenant is in place per the listing (cap 100). Map markers show all; the list shows only the top N by ROI. <b>A</b> ≥75, <b>B</b> 60–74, <b>C</b> 45–59, <b>Reject</b> &lt;45 or fails any filter.<br>
+<b>Landlord law score</b>: rent control/preemption 25 · just-cause 20 · eviction timeline 25 · nonpayment notice 15 · deposit cap 15 (data/landlord_law.csv, statutes cited per state).</small></details>
+<details><summary><b>Landlord law score by state</b></summary><table id="law"></table></details>
+</div>
+<div id="p3" style="display:none"><h3>Leaderboard <small id="lbn"></small></h3><small>Follows the filters on the Deal filter tab.</small>
+<div class="tabs" id="lbt"><button data-k="score" class="on">ROI score</button><button data-k="coc">Cash-on-cash</button><button data-k="pr">Price-to-rent (lowest)</button><button data-k="cagr_5y">5-year growth</button><button data-k="cagr_10y">10-year growth</button><button data-k="landlord_score">Landlord score</button><button data-k="violent_rate">Lowest crime</button><button data-k="price">Cheapest</button></div>
+<table id="lbd"></table><h4>Top states by average ROI score</h4><table id="lbs"></table><h4>Top counties by average ROI score</h4><table id="lbc"></table><h4>Top zip codes by average ROI score</h4><table id="lbz"></table></div>
+<div id="p2" style="display:none"><h3>US home price heat map</h3>
+Metric: <select id="m"><option value="fhfa_cagr_1y">Home price change, 1 year (FHFA)</option><option value="fhfa_cagr_5y">Yearly price growth, 5 years (FHFA)</option><option value="fhfa_cagr_10y" selected>Yearly price growth, 10 years (FHFA)</option><option value="fhfa_cagr_since1975">Yearly price growth since 1975 (FHFA)</option><option value="zhvi_cagr_5y">Yearly home value growth, 5 years (Zillow)</option><option value="fhfa_yoy_std">Steadiness of prices (lower = steadier)</option><option value="price_to_rent">Price-to-rent (state)</option><option value="landlord_score">Landlord law score</option></select>
+<h4>National real home price index, 1890–present (Shiller)</h4><canvas id="c" width="480" height="220"></canvas><br><small><b>What this chart shows:</b> US national home prices after inflation, 1890 to today (Robert Shiller, <i>Irrational Exuberance</i> Fig 3.1, index 1890 = 100). Flat for ~100 years, then the 2000s bubble, the 2008–12 crash and the post-2020 surge. Y axis = index value; X axis = year. Source: Robert Shiller, online data for Fig 3.1; data through '+'<span id="shd"></span>.</small>
+<h4>Data as of</h4><div id="asof"></div></div></div>
+<script>
+var CC={A:'#1a9850',B:'#66bd63',C:'#fdae61',Reject:'#888'};const $=id=>document.getElementById(id),f=(v,u='')=>v==null?'n/a':v.toLocaleString()+u;
+const S={};STATES.forEach(s=>S[s.state]=s);const LS={};LAW.forEach(l=>LS[l.abbr]=l);STATES.forEach(s=>s.landlord_score=(LS[s.abbr]||{}).landlord_score);
+const map=L.map('map',{preferCanvas:true}).setView([38,-96],4);
+const ZI={};ZIPS.forEach(r=>(ZI[r[3]]=ZI[r[3]]||[]).push(r));
+// state layer + labels
+const info=L.control();info.onAdd=()=>{info._d=L.DomUtil.create('div','info');info.update();return info._d};
+info.update=s=>{info._d.innerHTML=s?`<b>${s.state}</b> · landlord score ${f(s.landlord_score)}<br>ZHVI $${f(s.zhvi)} · FHFA CAGR 5y/10y ${f(s.fhfa_cagr_5y,'%')}/${f(s.fhfa_cagr_10y,'%')}<br>Median county rent $${f(s.zori_county_median)} · price-to-rent ${f(s.price_to_rent)}`:'Hover a state · zoom in for counties · click a county for zip codes'};info.addTo(map);
+const MD={fhfa_cagr_1y:['Home price change, last 1 year','% per year','FHFA all-transactions HPI, state, '+ASOF['FHFA HPI']],
+fhfa_cagr_5y:['Average yearly home price growth, last 5 years','% per year (compound)','FHFA HPI, state, to '+ASOF['FHFA HPI']],
+fhfa_cagr_10y:['Average yearly home price growth, last 10 years','% per year (compound)','FHFA HPI, state, to '+ASOF['FHFA HPI']],
+fhfa_cagr_since1975:['Average yearly home price growth since 1975','% per year (compound)','FHFA HPI, state, 1975 to '+ASOF['FHFA HPI']],
+zhvi_cagr_5y:['Average yearly growth of typical home value, last 5 years','% per year (compound)','Zillow ZHVI (all homes), state, to '+ASOF['Zillow ZHVI']],
+fhfa_yoy_std:['How bumpy prices have been (spread of yearly changes, 1975+)','percentage points; lower = steadier','FHFA HPI, state, to '+ASOF['FHFA HPI']],
+price_to_rent:['Price-to-rent: typical value ÷ 12 months of median county rent','years of rent; lower = better for landlords','Zillow ZHVI '+ASOF['Zillow ZHVI']+' & ZORI '+ASOF['Zillow ZORI']+' (derived)'],
+landlord_score:['Landlord law score (our statute-based score)','0–100; higher = more landlord-friendly','data/landlord_law.csv, state statutes as of Nov 2026']};
+let layer,lg;function draw(){const k=$('m').value;const vals=STATES.map(s=>s[k]).filter(v=>v!=null).sort((a,b)=>a-b);
+const q=p=>vals[Math.floor(p*(vals.length-1))];const br=[.2,.4,.6,.8].map(q);const cols=['#2c7bb6','#abd9e9','#ffffbf','#fdae61','#d7191c'];
+const col=v=>v==null?'#ccc':cols[br.filter(b=>v>b).length];if(layer)map.removeLayer(layer);
+layer=L.geoJSON(GEO,{style:ft=>({fillColor:col((S[ft.properties.name]||{})[k]),weight:.5,color:'#888',opacity:.6,fillOpacity:.7}),onEachFeature:(ft,l)=>l.on({mouseover:()=>info.update(S[ft.properties.name]),mouseout:()=>info.update()})}).addTo(map);layer.bringToBack();
+if(lg)map.removeControl(lg);lg=L.control({position:'bottomleft'});lg.onAdd=()=>{const d=L.DomUtil.create('div','info legend');const md=MD[k];d.innerHTML='<b>State colour: '+md[0]+'</b><br>Units: '+md[1]+'<br>'+cols.map((c,i)=>`<i style="background:${c}"></i> ${(i?br[i-1]:vals[0]).toFixed(1)} to ${(i<4?br[i]:vals.at(-1)).toFixed(1)}`).join('<br>')+'<br>Five equal-count groups of states; grey = no data<br><small>Source and data date: '+md[2]+'</small><hr><b>Dots: listings</b> (big dot = qualifies, small = does not). Ranked by ROI score 0–100.<br>'+Object.entries(CC).map(([c,v])=>`<i style="background:${v};border-radius:50%"></i> ${c==='Reject'?'Reject (fails a filter or score &lt;45)':c+' ('+{A:'score ≥75',B:'60–74',C:'45–59'}[c]+')'}`).join('<br>')+'<br><small>Shading: states with homes matching your filters are in full colour; other states are faded.<br>Grades come from the ROI score: A 75 and up, B 60–74, C 45–59, Reject below 45 or failing any must-have check.<br>Lines: thin grey = state borders; fainter grey = county borders and names (shown from zoom 6). Click a county for its zip codes. Boundaries: Census 2010 county outlines.<br>Listings: '+(window.DEALMETA?(DEALMETA.live?DEALMETA.provider:'<b>EXAMPLE DATA</b>: made-up listings placed in real zip codes to show how the tool works. The area figures (Zillow, HUD, FBI) are real; the homes, prices and addresses are not')+', run '+(DEALMETA.run_at_utc||'not yet available'):'not yet available')+'</small>';return d};lg.addTo(map)}
+$('m').onchange=()=>{draw();window.DEALS&&renderDeals()};draw();
+const NI=L.divIcon({className:"",iconSize:[0,0]});const slabs=L.layerGroup(GEO.features.map(ft=>{const c=L.geoJSON(ft).getBounds().getCenter();const n=ft.properties.name;
+ const ll={'Florida':[28.3,-81.7],'Michigan':[43.6,-84.7],'Louisiana':[31,-92.4],'Alaska':[64,-152],'Hawaii':[20.6,-157]}[n]||c;
+ return L.marker(ll,{icon:NI,opacity:0,interactive:false}).bindTooltip(n,{permanent:true,direction:'center',className:'slab'})})).addTo(map);
+// counties (zoom>=6), names (zoom>=7)
+const STF={};STATES.forEach(s=>{});const cty=L.geoJSON(COUNTIES,{style:{color:'#999',weight:.5,opacity:.5,fill:true,fillOpacity:0},
+ onEachFeature:(ft,l)=>l.on('click',e=>{const z=(ZI[ft.id]||[]).slice().sort((a,b)=>(b[5]/b[4]||0)-(a[5]/a[4]||0));
+  L.popup().setLatLng(e.latlng).setContent(`<b>${ft.properties.NAME} ${ft.properties.LSAD} (${ft.id})</b><br>${z.length} zips · sorted by rent/price<table><tr><th>Zip</th><th>ZHVI SFR</th><th>ZORI</th><th>P/R</th><th>10y%</th><th>HUD 3BR</th></tr>`+
+  z.slice(0,12).map(r=>`<tr><td>${r[0]} ${r[1]||''}</td><td>$${f(r[4])}</td><td>$${f(r[5])}</td><td>${r[5]?(r[4]/12/r[5]).toFixed(1):'n/a'}</td><td>${f(r[7])}</td><td>$${f(r[9])}</td></tr>`).join('')+'</table>').openOn(map)})});
+const clabs=L.layerGroup(COUNTIES.features.map(ft=>L.marker(L.geoJSON(ft).getBounds().getCenter(),{icon:NI,opacity:0,interactive:false}).bindTooltip(ft.properties.NAME,{permanent:true,direction:'center',className:'clab'})));
+function zoomLayers(){const z=map.getZoom();z>=6?cty.addTo(map):map.removeLayer(cty);z>=6?clabs.addTo(map):map.removeLayer(clabs);z>=7?map.removeLayer(slabs):slabs.addTo(map);if(dl)dl.bringToFront&&0}
+map.on('zoomend',zoomLayers);
+// deals
+let dl=L.layerGroup().addTo(map);
+function show(i){const r=DEALS[i];$('detail').innerHTML=`<div class="info"><b>${r.address}</b>, ${r.city||''} ${r.state} ${r.zip||''} (${r.county||''}) <span class="cat ${r.category}">${r.category} ${r.score}</span><br>
+$${f(r.price)} · ${f(r.beds)} bd / ${f(r.baths)} ba · ${f(r.sqft)} sqft · built ${f(r.year_built)} · ${r.property_type} ${r.url?`· <a href="${r.url}" target=_blank>listing</a>`:''}<br><i>${r.description||''}</i> · source: ${r.source}<br>
+<b>Rent</b> $${f(r.rent)}/mo (${r.rent_src}) · HUD ${r.hud_src}: $${f(r.hud_rent)} → Section 8 fit ${f(r.s8_ratio)}×<br>
+<b>Costs/mo</b>: ${Object.entries(r.costs).map(([k,v])=>k+' $'+v).join(' · ')}<br><b>vs zip typical value</b> (Zillow ZHVI SFR $${f(r.zip_zhvi)}): ${f(r.vs_zip_value_pct,'% below')} · tenant in place: ${r.tenant_in_place?'yes (from listing text)':'not stated'}<br><a href="${r.zillow_url}" target=_blank>${r.zillow_label}</a><br><b>Cash flow $${f(r.cashflow)}/mo</b> · P/R ${r.pr} · cash-on-cash ${r.coc}% · landlord ${r.landlord_score} · zip CAGR 5y/10y ${f(r.cagr_5y,'%')}/${f(r.cagr_10y,'%')} · violent crime ${f(r.violent_rate)}/100k (state)<br>
+${Object.entries(r.checks).map(([k,v])=>(v?'✅ ':'❌ ')+k).join(' · ')}${r.flags.length?'<br>⚠ flags: '+r.flags.join(', '):''}</div>`}
+function renderDeals(){if(!window.DEALS||!window.DEALMETA){$('banner').innerHTML='<div class="banner sample">No deals file yet — not yet available. Press Refresh to build it.</div>';$('tbl').innerHTML='';$('cnt').textContent='';return}const m=DEALMETA;if(!DEALS.length){$('banner').innerHTML='';$('cnt').textContent='0 listings';$('tbl').innerHTML='<tr><td>No listings in the current data. Try Refresh or widen the filters.</td></tr>';dl.clearLayers();return}$('banner').innerHTML=m.live?`<div class="banner live">LIVE — ${m.provider} · run ${m.run_at_utc}</div>`:`<div class="banner sample">SAMPLE DATA — synthetic listings in real zips (real Zillow/HUD/FBI area data). Not real properties. Goes live when a free-tier key is added to .env.</div>`;
+ let rows=DEALS.map((r,i)=>[r,i]).filter(([r])=>(!$('qonly').checked||r.qualifies)&&passF(r));$('cnt').textContent=`${m.n_qualify} qualify of ${m.n} listings · filters: $${f(m.params.min_price)}–$${f(m.params.max_price)}, price-to-rent ≤ ${m.params.max_pr}, cash flow ≥ $${m.params.min_cf}/mo, landlord score ≥ ${m.params.landlord_min} · data run ${m.run_at_utc||'not yet available'}`;
+ const sf=$('stf').value;const vis=rows,G={};vis.forEach(x=>(G[x[0].state]=G[x[0].state]||[]).push(x));
+ const hdr='<tr><th>#</th><th>Grade</th><th>ROI score</th><th>Where</th><th>Price</th><th>Rent</th><th>Cash flow/mo</th><th>Price-to-rent</th><th>Landlord score</th><th>Zillow</th></tr>';
+ const tr=([r,i],n)=>`<tr class="d" onclick="show(${i});map.setView([${r.lat},${r.lon}],10)"><td>${n+1}</td><td><span class="cat ${r.category}">${r.category}</span></td><td>${r.score}</td><td>${r.city||''}, ${r.state} ${r.zip||''}</td><td>$${f(r.price)}${r.in_preferred_budget?' <span class="pb" title="Price is within the preferred $50,000–$100,000 budget">preferred</span>':''}</td><td>$${f(r.rent)}</td><td>$${f(r.cashflow)}</td><td>${r.pr}</td><td>${r.landlord_score}${r.tenant_in_place?' 🏠':''}</td><td><a href="${r.zillow_url}" target=_blank onclick="event.stopPropagation()">link</a></td></tr>`;
+ const top=+$('topn').value;$('tbl').innerHTML=Object.keys(G).length?Object.entries(G).sort((a,b)=>b[1][0][0].score-a[1][0][0].score).map(([st,a])=>{a.sort((x,y)=>y[0].score-x[0].score);return `<details class="sg" data-st="${st}"${sf||Object.keys(G).length<=3?' open':''}><summary>${st} · ${a.length} deal${a.length>1?'s':''} · best ROI score ${a[0][0].score}</summary><table>${hdr}${a.slice(0,top).map(tr).join('')}</table>${a.length>top?`<small>Showing the top ${top} of ${a.length} by ROI score.</small>`:''}</details>`}).join(''):'<p>No deals match the current view.</p>';
+ rows=vis;window.VIS=vis;$('fcnt').textContent=`${vis.length} home${vis.length===1?'':'s'} match`;shade(new Set(vis.map(([r])=>r.state)));lb();
+ dl.clearLayers();rows.slice(0,+$('topn').value).forEach(([r,i])=>r.lat&&L.circleMarker([r.lat,r.lon],{radius:r.qualifies?6:3,color:'#222',weight:.5,fillColor:CC[r.category],fillOpacity:.9}).on('click',()=>show(i)).bindTooltip(`${r.category} ${r.score} · $${f(r.price)} · CF $${r.cashflow}`).addTo(dl))}
+async function reloadDeals(){try{const j=await (await fetch('deals.json?'+Date.now(),{cache:'no-store'})).json();window.DEALS=j.deals||[];window.DEALMETA=j.meta||{n:0,n_qualify:0,params:{}}}catch(e){}fillSel();renderDeals()}
+async function refresh(){ $('st').textContent='refreshing…';const p=new URLSearchParams({provider:'auto',MIN_PRICE:$('minp').value,MAX_PRICE:$('maxp').value,MAX_PR:$('mpr').value,MIN_CASHFLOW:$('mcf').value,LANDLORD_MIN:$('lmin').value});
+ try{const r=await (await fetch('/api/refresh?'+p,{method:'POST'})).json();$('st').textContent=r.ok?'done':'error: '+r.err.slice(-200);reloadDeals()}catch(e){$('st').textContent='server not running (python3 server.py)'}}
+$('refresh').onclick=refresh;$('mcf').oninput=()=>$('mcfv').textContent=$('mcf').value;$('qonly').onchange=renderDeals;$('topn').onchange=renderDeals;
+$('u50').onclick=()=>{$('minp').value=0;$('maxp').value=50000;$('qonly').checked=false;refresh()};$('budget').onclick=()=>{$('minp').value=50000;$('maxp').value=100000;$('qonly').checked=true;refresh()};
+const AB2N={},N2AB={};STATES.forEach(x=>{AB2N[x.abbr]=x.state;N2AB[x.state]=x.abbr});const F2S={};ZIPS.forEach(r=>F2S[r[3]]=r[2]);
+const IDX=[],seen=new Set(),add=(t,k,v)=>{const key=k+'|'+t;if(!seen.has(key)){seen.add(key);IDX.push({t,k,v,l:t.toLowerCase()})}};
+STATES.forEach(x=>add(x.state+' ('+x.abbr+') · state','state',x.abbr));
+COUNTIES.features.forEach(ft=>add(ft.properties.NAME+' '+(ft.properties.LSAD||'')+', '+(F2S[ft.id]||'')+' · county','county',ft.id));
+(window.DEALS||[]).concat(ZIPS.map(r=>({city:r[1],state:r[2]}))).forEach(d=>d.city&&add(d.city+', '+d.state+' · city','city',d.city+'|'+d.state));
+ZIPS.forEach(r=>add(r[0]+' · zip, '+(r[1]||'')+' '+r[2],'zip',r[0]));
+$('zipq').oninput=()=>{const q=$('zipq').value.trim().toLowerCase();if(q.length<2){$('sugg').innerHTML='';return}
+ const m=IDX.filter(e=>e.l.startsWith(q)).concat(IDX.filter(e=>!e.l.startsWith(q)&&e.l.includes(q))).slice(0,15);$('sugg').innerHTML=m.map(e=>`<option value="${e.t}">`).join('')};
+const ZM={};ZIPS.forEach(r=>ZM[r[0]]=r);
+function dealsTable(ds){return ds.length?'<table>'+ds.slice(0,15).map(([d,i])=>`<tr class="d" onclick="show(${i})"><td><span class="cat ${d.category}">${d.category}</span></td><td>ROI ${d.score}</td><td>${d.address}, ${d.city||''} ${d.zip}</td><td>$${f(d.price)}</td><td>cash flow $${f(d.cashflow)}/mo</td></tr>`).join('')+'</table>'+(ds.length>15?`<small>First 15 of ${ds.length} by ROI score.</small>`:''):''}
+function fit(pts,b){if(pts.length)map.fitBounds(L.latLngBounds(pts).pad(.3),{maxZoom:12});else if(b)map.fitBounds(b)}
+const cnorm=c=>(c||'').replace(/ (County|Parish|Borough|Census Area|city|City)$/,'');
+function zoomTo(k,v){const all=(window.DEALS||[]).map((d,i)=>[d,i]),P=a=>a.filter(([d])=>d.lat).map(([d])=>[d.lat,d.lon]);
+ if(k==='state'){const ft=GEO.features.find(x=>x.properties.name===AB2N[v]);ft&&map.fitBounds(L.geoJSON(ft).getBounds())}
+ else if(k==='county'){const [c,st]=v.split('|');const ft=COUNTIES.features.find(x=>F2S[x.id]===st&&x.properties.NAME===cnorm(c));fit(P(all.filter(([d])=>d.county===c&&d.state===st)),ft&&L.geoJSON(ft).getBounds())}
+ else if(k==='zip'){const r=ZM[v],cf=r&&COUNTIES.features.find(ft=>ft.id===r[3]);fit(P(all.filter(([d])=>d.zip===v)),cf&&L.geoJSON(cf).getBounds())}}
+function findZip(){const q=$('zipq').value.trim(),ql=q.toLowerCase();if(!q)return;
+ const e=IDX.find(x=>x.l===ql)||(/^\d{5}$/.test(q)?{k:'zip',v:q}:null)||IDX.find(x=>x.l.startsWith(ql+' ')||x.l.startsWith(ql+',')||x.l.startsWith(ql+' ('))||IDX.find(x=>x.l.startsWith(ql));
+ const msg=h=>$('zipmsg').innerHTML='<div class="info">'+h+'</div>';
+ if(!e)return msg(`We found no zip, city, county or state matching "${q}".`);
+ const all=(window.DEALS||[]).map((d,i)=>[d,i]),srt=a=>a.sort((x,y)=>y[0].score-x[0].score),P=a=>a.filter(([d])=>d.lat).map(([d])=>[d.lat,d.lon]),n=(ds,w)=>`<br><b>${ds.length} deal${ds.length===1?'':'s'} in this ${w}</b>`+dealsTable(ds);
+ if(e.k==='zip'){const z=e.v,r=ZM[z],ds=srt(all.filter(([d])=>d.zip===z));if(!r&&!ds.length)return msg(`We have no information for zip ${z}.`);
+  const cf=r&&COUNTIES.features.find(ft=>ft.id===r[3]);fit(P(ds),cf&&L.geoJSON(cf).getBounds());
+  return msg((r?`<b>Zip ${z}</b> · ${r[1]||''}, ${r[2]}<br>Typical single-family value ${r[4]?'$'+f(r[4]):'not available'} (Zillow) · typical rent ${r[5]?'$'+f(r[5])+'/mo':'not available'} (Zillow) · price-to-rent ${r[5]?(r[4]/12/r[5]).toFixed(1)+' years':'not available'}<br>Yearly value growth: 5 years ${f(r[6],'%')}, 10 years ${f(r[7],'%')} · HUD fair rent 2 bed $${f(r[8])}, 3 bed $${f(r[9])} (${r[10]==='SAFMR'?'zip level':'county level'})${P(ds).length?'':cf?'<br><small>Map shows the county; no exact zip location in our data.</small>':''}`:`<b>Zip ${z}</b> · no area figures in our data.`)+n(ds,'zip'))}
+ if(e.k==='state'){const ds=srt(all.filter(([d])=>d.state===e.v));zoomTo('state',e.v);return msg(`<b>${AB2N[e.v]}</b>`+n(ds,'state'))}
+ if(e.k==='county'){const ft=COUNTIES.features.find(x=>x.id===e.v),nm=ft.properties.NAME,st=F2S[e.v];map.fitBounds(L.geoJSON(ft).getBounds());
+  const ds=srt(all.filter(([d])=>d.state===st&&cnorm(d.county)===nm));return msg(`<b>${nm} ${ft.properties.LSAD||''}, ${st||''}</b>`+n(ds,'county'))}
+ const [c,st]=e.v.split('|'),ds=srt(all.filter(([d])=>d.city===c&&d.state===st)),zs=ZIPS.filter(r=>r[1]===c&&r[2]===st);
+ let b=null;zs.forEach(r=>{const ft=COUNTIES.features.find(x=>x.id===r[3]);if(ft){const g=L.geoJSON(ft).getBounds();b=b?b.extend(g):g}});fit(P(ds),b);
+ msg(`<b>${c}, ${st}</b> · ${zs.length} zip code${zs.length===1?'':'s'} in our data${P(ds).length?'':'<br><small>Map shows the surrounding county; no exact city location in our data.</small>'}`+n(ds,'city'))}
+const num=id=>{const v=$(id).value.trim();return v===''?null:+v};
+function passF(r){const g=$('gf').value,t=$('ften').value,mx=+$('fpr').value,mn=Math.max(+$('fpm').value,$('fu50').checked?0:50000);
+ const ge=(id,v)=>{const x=num(id);return x==null||(v!=null&&v>=x)},le=(id,v)=>{const x=num(id);return x==null||(v!=null&&v<=x)};
+ return (!$('stf').value||r.state===$('stf').value)&&(!$('ctf').value||r.county===$('ctf').value)&&(!g||r.category===g)&&r.price>=mn&&r.price<=mx&&
+  ge('fsc',r.score)&&le('fpt',r.pr)&&ge('fcoc',r.coc)&&(!t||(t==='1')===!!r.tenant_in_place)&&ge('fs8',r.s8_ratio)&&ge('fg5',r.cagr_5y)&&ge('fg10',r.cagr_10y)&&ge('fll',r.landlord_score)&&le('fcr',r.violent_rate)}
+function priceRange(reset){const P=(window.DEALS||[]).map(d=>d.price).filter(v=>v!=null);if(!P.length)return;const lo=Math.floor(Math.min(...P)/1000)*1000,hi=Math.ceil(Math.max(...P)/1000)*1000;
+ ['fpm','fpr'].forEach(id=>{$(id).min=lo;$(id).max=hi});if(reset||!$('fpr').dataset.init){$('fpm').value=lo;$('fpr').value=hi;$('fpr').dataset.init=1}
+ const pc=v=>Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));$('pbk').style.left=pc(50000)+'%';$('pbk').style.width=(pc(100000)-pc(50000))+'%';$('pblab').style.left=pc(50000)+'%';pv()}
+function pv(){if(+$('fpm').value>+$('fpr').value)$('fpm').value=$('fpr').value;$('fpmv').textContent=f(+$('fpm').value);$('fprv').textContent=f(+$('fpr').value)}
+function fillSel(){priceRange();const sv=$('stf').value,cv=$('ctf').value,D=window.DEALS||[];
+ $('stf').innerHTML='<option value="">All states</option>'+[...new Set(D.map(d=>d.state))].sort().map(x=>`<option value="${x}"${x===sv?' selected':''}>${AB2N[x]||x}</option>`).join('');
+ $('ctf').innerHTML='<option value="">All counties</option>'+[...new Set(D.filter(d=>!sv||d.state===sv).map(d=>d.county).filter(Boolean))].sort().map(x=>`<option${x===cv?' selected':''}>${x}</option>`).join('')}
+function shade(set){layer&&layer.eachLayer(l=>l.setStyle({fillOpacity:set.has(N2AB[l.feature.properties.name])?.75:.12}))}
+let LBK='score';const LBU={score:['ROI score',''],coc:['Cash-on-cash','%/yr'],pr:['Price-to-rent','years'],cagr_5y:['5-year growth','%/yr'],cagr_10y:['10-year growth','%/yr'],landlord_score:['Landlord score',''],violent_rate:['Violent crime','per 100k (state)'],price:['Price','$']};
+function lb(){const V=window.VIS||[],k=LBK,asc=['pr','violent_rate','price'].includes(k);$('lbn').textContent=`· ${V.length} matching homes`;
+ const d=V.filter(([r])=>r[k]!=null).sort((a,b)=>asc?a[0][k]-b[0][k]:b[0][k]-a[0][k]).slice(0,25);
+ $('lbd').innerHTML=`<tr><th>#</th><th>Home</th><th>${LBU[k][0]}</th><th>Grade</th><th>ROI</th><th>Zillow</th></tr>`+d.map(([r,i],n)=>`<tr class="d" onclick="show(${i});map.setView([${r.lat},${r.lon}],12)"><td>${n+1}</td><td>${r.city||''}, ${r.state} ${r.zip}</td><td>${k==='price'?'$'+f(r[k]):f(r[k])} <small>${k==='price'?'':LBU[k][1]}</small>${r.in_preferred_budget?' <span class="pb" title="Price is within the preferred $50,000–$100,000 budget">preferred</span>':''}</td><td><span class="cat ${r.category}">${r.category}</span></td><td>${r.score}</td><td><a href="${r.zillow_url}" target=_blank onclick="event.stopPropagation()">link</a></td></tr>`).join('')+(d.length?'':'<tr><td>No homes match.</td></tr>');
+ const area=(id,key,lab,kind)=>{const G={};V.forEach(([r])=>{const x=key(r);(G[x]=G[x]||[]).push(r.score)});const a=Object.entries(G).map(([x,s])=>[x,s.reduce((p,q)=>p+q,0)/s.length,s.length]).sort((p,q)=>q[1]-p[1]).slice(0,15);
+  $(id).innerHTML='<tr><th>#</th><th>'+kind+'</th><th>Average ROI score</th><th>Deals</th></tr>'+a.map(([x,v,c],n)=>`<tr class="d" onclick="zoomTo('${kind.toLowerCase()}','${x.replace(/'/g,"\\'")}')"><td>${n+1}</td><td>${lab(x)}</td><td>${v.toFixed(1)}</td><td>${c}</td></tr>`).join('')};
+ area('lbs',r=>r.state,x=>AB2N[x]||x,'State');area('lbc',r=>r.county+'|'+r.state,x=>x.replace('|',', '),'County');area('lbz',r=>r.zip,x=>{const z=ZM[x];return x+(z?' · '+(z[1]||'')+' '+z[2]:'')},'Zip')}
+document.querySelectorAll('#lbt button').forEach(b=>b.onclick=()=>{LBK=b.dataset.k;document.querySelectorAll('#lbt button').forEach(x=>x.className=x===b?'on':'');lb()});
+['stf','gf','ften','fu50'].forEach(id=>$(id).addEventListener('change',()=>{if(id==='stf'){$('ctf').value='';fillSel()}renderDeals()}));
+$('ctf').onchange=renderDeals;['fsc','fpt','fcoc','fs8','fg5','fg10','fll','fcr'].forEach(id=>$(id).oninput=renderDeals);
+$('fpr').oninput=$('fpm').oninput=()=>{pv();renderDeals()};
+$('freset').onclick=e=>{e.preventDefault();['stf','ctf','gf','ften','fsc','fpt','fcoc','fs8','fg5','fg10','fll','fcr'].forEach(id=>$(id).value='');$('fu50').checked=true;priceRange(1);fillSel();renderDeals()};
+$('zipgo').onclick=findZip;$('zipq').onkeydown=e=>{if(e.key==='Enter')findZip()};$('zipq').addEventListener('change',findZip);
+reloadDeals();{const u=new URLSearchParams(location.search);if(u.get('z'))map.setView(u.get('c').split(',').map(Number),+u.get('z'));if(u.get('d'))show(+u.get('d'))}zoomLayers();
+$('law').innerHTML='<tr><th>St</th><th>Score</th><th>Rent ctrl</th><th>Just cause</th><th>Notice d</th><th>Timeline</th><th>Deposit cap</th><th>Statutes</th></tr>'+LAW.slice().sort((a,b)=>b.landlord_score-a.landlord_score).map(l=>`<tr><td>${l.abbr}</td><td>${l.landlord_score}</td><td>${l.rent_control}</td><td>${l.just_cause}</td><td>${l.notice_days}</td><td>${l.timeline}</td><td>${l.deposit_cap_months??'none'}</td><td><small>${l.statute}</small></td></tr>`).join('');
+const TB=['t1','t2','t3'];TB.forEach(t=>$(t).addEventListener('click',()=>TB.forEach(u=>{$('p'+u[1]).style.display=u===t?'':'none';$(u).className=u===t?'on':''})));
+const c=$('c').getContext('2d');const xs=SHILLER.map(r=>r[0]),ys=SHILLER.map(r=>r[1]);const mx=Math.max(...ys),mn=Math.min(...ys);
+const X=x=>30+(x-1890)/(xs.at(-1)-1890)*440,Y=y=>200-(y-mn)/(mx-mn)*180;c.beginPath();SHILLER.forEach((r,i)=>i?c.lineTo(X(r[0]),Y(r[1])):c.moveTo(X(r[0]),Y(r[1])));c.strokeStyle='#d7191c';c.stroke();
+c.fillStyle='#333';[1900,1940,1980,2020].forEach(y=>c.fillText(y,X(y)-10,215));[mn,100,mx].forEach(v=>c.fillText(v.toFixed(0),0,Y(v)+3));
+$('shd').textContent=SHILLER.length?SHILLER.at(-1)[0]:'not yet available';$('asof').innerHTML=Object.entries(ASOF).map(([k,v])=>`${k}: data through ${v}`).join('<br>')+'<br>HUD FMR/SAFMR FY2026 · FBI CDE 2024 (state) · Census 2024 Gazetteer';
+</script></body></html>
